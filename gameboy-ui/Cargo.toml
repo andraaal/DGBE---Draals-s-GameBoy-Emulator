@@ -1,0 +1,9 @@
+[package]
+name = "gameboy-ui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gameboy-emu = { path = "../gameboy-emu" }
+eframe = "0.34"
+egui_file = "0.26"

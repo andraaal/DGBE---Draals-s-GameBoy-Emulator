@@ -1,0 +1,170 @@
+pub struct Memory {
+    data: [u8; 0x10000], // 64KB of memory
+}
+
+#[expect(dead_code)]
+impl Memory {
+    pub fn new(rom: Vec<u8>) -> Self {
+        let mut data = [0; 0x10000];
+        // Initialize memory with the boot ROM from DMG.
+        data[0x0] = 0x31; // LD SP,d16
+        data[0x1] = 0xFE; // Low byte of 0xFFFE
+        data[0x2] = 0xFF; // High byte of 0xFFFE
+        data[0x3] = 0xAF; // XOR A
+        data[0x4] = 0x21; // LD HL,d16
+        data[0x5] = 0x9F; // Low byte of 0x9FFF
+        data[0x6] = 0xFF; // High byte of 0x9FFF
+        data[0x7] = 0x32; // LD (HL-),A
+        data[0x8] = 0xCB; // Prefix for bit operations
+        data[0x9] = 0x7C; // BIT 7,H
+        data[0xA] = 0x20; // JR NZ,r8
+        data[0xB] = 0xFB; // Relative jump back to 0x7
+        data[0xC] = 0x21; // LD HL,d16
+        data[0xD] = 0x26; // Low byte of 0xFF26
+        data[0xE] = 0xFF; // High byte of 0xFF26
+        data[0xF] = 0x0E; // LD C,d8
+        data[0x10] = 0x11; // Value 0x11
+        data[0x11] = 0x3E; // LD A,d8
+        data[0x12] = 0x80; // Value 0x80
+        data[0x13] = 0x32; // LD (HL-),A
+        data[0x14] = 0xE2; // LD (C),A
+        data[0x15] = 0x0C; // INC C
+        data[0x16] = 0x3E; // LD A,d8
+        data[0x17] = 0xF3; // Value 0xF3
+        data[0x18] = 0xE2; // LD (C),A
+        data[0x19] = 0x32; // LD (HL-),A
+        data[0x1A] = 0x3E; // LD A,d8
+        data[0x1B] = 0x77; // Value 0x77
+        data[0x1C] = 0x77; // LD (HL),A
+        data[0x1D] = 0x3E; // LD A,d8
+        data[0x1E] = 0xFC; // Value 0xFC
+        data[0x1F] = 0xE0; // LDH (a8),A
+        data[0x20] = 0x47; // Address 0xFF47
+        data[0x21] = 0x11; // LD DE,d16
+        data[0x22] = 0x04; // Low byte of 0x0104
+        data[0x23] = 0x01; // High byte of 0x0104
+        data[0x24] = 0x21; // LD HL,d16
+        data[0x25] = 0x10; // Low byte of 0x8010
+        data[0x26] = 0x80; // High byte of 0x8010
+        data[0x27] = 0x1A; // LD A,DE
+        data[0x28] = 0xCD; // CALL 0x0095
+        data[0x29] = 0x95; // Low byte of 0x0095
+        data[0x2A] = 0x00; // High byte of 0x0095
+        data[0x2B] = 0xCD; // CALL 0x0096
+        data[0x2C] = 0x96; // Low byte of 0x0096
+        data[0x2d] = 0x00; // High byte of 0x0096
+        data[0x2e] = 0x13; // INC DE
+        data[0x2f] = 0x7B; // LD A,E
+        data[0x30] = 0xFE; // CP A,d8
+        data[0x31] = 0x34; // Value 0x34
+        data[0x32] = 0x20; // JR NZ,r8
+        data[0x33] = 0xF3; // Relative jump back to #0x27
+        data[0x34] = 0x11; // LD DE,d16
+        data[0x35] = 0xD8; // Low byte of 0x00D8
+        data[0x36] = 0x00; // High byte of 0x00D8
+        data[0x37] = 0x06; // LD B,d8
+        data[0x38] = 0x08; // Value 0x08
+        data[0x39] = 0x1A; // LD A,DE
+        data[0x3A] = 0x13; // INC DE
+        data[0x3b] = 0x22; // LD (HL+),A
+        data[0x3c] = 0x23; // INC HL
+        data[0x3d] = 0x05; // DEC B
+        data[0x3e] = 0x20; // JR NZ,r8
+        data[0x3f] = 0xF9; // Relative jump back to #57
+        data[0x40] = 0x3E; // LD A,d8
+        data[0x41] = 0x19; // Value 0x19
+        data[0x42] = 0xEA; // LD (a16),A
+        data[0x43] = 0x10; // Low byte of 0x9910
+        data[0x44] = 0x99; // High byte of 0x9910
+        data[0x45] = 0x21; // LD HL,d16
+        data[0x46] = 0x2F; // Low byte of 0x992F
+        data[0x47] = 0x99; // High byte of 0x992F
+        data[0x48] = 0x0E; // LD C,d8
+        data[0x49] = 0x0C; // Value 0x0C
+
+        // From here on only the "0x" has been added, but no actual conversion has happened
+        data[0x74] = 0x3D; // DEC A
+        data[0x75] = 0x28; // JR Z,r8
+        data[0x76] = 0x0A; // Relative jump forward to #86
+        data[0x77] = 0x32; // LD (HL-),A
+        data[0x78] = 0x0D; // DEC C
+        data[0x79] = 0x20; // JR NZ,r8
+        data[0x80] = 0xF9; // Relative jump back to #77
+        data[0x81] = 0x2E; // LD L,d8
+        data[0x82] = 0x0F; // Value 0x0F
+        data[0x83] = 0x18; // JR r8
+        data[0x84] = 0xF3; // Relative jump back to #72
+        data[0x85] = 0x67; // LD H,A
+        data[0x86] = 0x3E; // LD A,d8
+        data[0x87] = 0x64; // Value 0x64
+        data[0x88] = 0x57; // LD D,A
+        data[0x89] = 0xE0; // LDH (a8),A
+        data[0x90] = 0x42; // Address 0xFF42
+        data[0x91] = 0x3E; // LD A,d8
+        data[0x92] = 0x91; // Value 0x91
+        data[0x93] = 0xE0; // LDH (a8),A
+        data[0x94] = 0x40; // Address 0xFF40
+        data[0x95] = 0x04; // INC B
+        data[0x96] = 0x1E; // LD E,d8
+        data[0x97] = 0x02; // Value 0x02
+        data[0x98] = 0x0E; // LD C,d8
+        data[0x99] = 0x0C; // Value 0x0C
+        data[0x100] = 0xE0; // LDH A,(a8)
+        data[0x101] = 0x44; // Address 0xFF44
+        data[0x102] = 0xFE; // CP A,d8
+        data[0x103] = 0x90; // Value 0x90
+        data[0x104] = 0x20; // JR NZ,r8
+        data[0x105] = 0xF3; // Relative jump back to #100 - faulty address
+        data[0x106] = 0x0D; // DEC C
+        data[0x107] = 0x20; // JR NZ,r8
+        data[0x108] = 0xF9; // Relative jump back to #100 - faulty address
+        data[0x109] = 0x0D; // DEC E
+        data[0x110] = 0x20; // JR NZ,r8
+        data[0x111] = 0xF2; // Relative jump back to #98 - faulty address
+        data[0x112] = 0x0E; // LD C,d8
+        data[0x113] = 0x13; // Value 0x13
+        data[0x114] = 0x24; // INC H
+        data[0x115] = 0x7C; // LD A,H
+        data[0x116] = 0x1E; // LD E,d8
+        data[0x117] = 0x83; // Value 0x83
+        data[0x118] = 0xFE; // CP A,d8
+        data[0x119] = 0x62; // Value 0x62
+        data[0x120] = 0x20; // JR NZ,r8
+        data[0x121] = 0xF3; // Relative jump forward to somewhere (0x0080)
+        data[0x122] = 0x1E; // LD E,d8
+        data[0x123] = 0xC1; // Value 0xC1
+        data[0x124] = 0xFE; // CP A,d8
+        data[0x125] = 0x64; // Value 0x64
+        data[0x126] = 0x20; // JR NZ,r8
+        data[0x127] = 0xF3; // Relative jump forward to somewhere (0x0085)
+        data[0x128] = 0x1A; // LD A,DE
+        data[0x129] = 0xE0; // LDH C,A
+        data[0x130] = 0x0C; // INC C
+        data[0x131] = 0x3E; // LD A,d8
+        data[0x132] = 0x87; // Value 0x87
+        data[0x133] = 0xE0; // LDH C,A
+        data[0x134] = 0x00; //
+
+
+
+        data[0x255] = 0xD3; // Illegal opcode to halt execution after the boot ROM finishes. (For testing purposes)
+
+        Self { data }
+    }
+
+    pub fn read_byte(&self, address: u16) -> u8 {
+        self.data[address as usize]
+    }
+
+    pub fn read_word(&self, address: u16) -> &[u8] {
+        &self.data[address as usize..address as usize + 2]
+    }
+
+    pub fn write_byte(&mut self, address: u16, value: u8) {
+        self.data[address as usize] = value;
+    }
+
+    pub fn write_word(&mut self, address: u16, values: &[u8; 2]) {
+        self.data[address as usize..address as usize + 2].copy_from_slice(values);
+    }
+}
