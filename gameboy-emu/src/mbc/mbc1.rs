@@ -55,21 +55,11 @@ impl MBC1 {
 
     pub fn read(&self, address: u16) -> u8 {
         match address {
-            0x0000..=0x3FFF => {
-                if self.advanced_banking_mode {
-                    self.rom[self.rom_bank1][address as usize]
-                } else {
-                    self.rom[0][address as usize]
-                }
-            }
+            0x0000..=0x3FFF => self.rom[self.rom_bank1][address as usize],
             0x4000..=0x7FFF => self.rom[self.rom_bank2][(address - 0x4000) as usize],
             0xA000..=0xBFFF => {
                 if self.ram_enabled {
-                    if self.advanced_banking_mode {
-                        self.ram[self.ram_bank][(address - 0xA000) as usize]
-                    } else {
-                        self.ram[0][(address - 0xA000) as usize]
-                    }
+                    self.ram[self.ram_bank][(address - 0xA000) as usize]
                 } else {
                     0xFF
                 }
