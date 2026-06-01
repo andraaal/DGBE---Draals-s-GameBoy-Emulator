@@ -11,6 +11,7 @@ pub(crate) struct EmulatorApp {
     errors: Vec<String>,
     emulator: gameboy_emu::Emulator,
     open_file_dialog: Option<FileDialog>,
+    opened_rom: String,
 }
 
 impl Default for EmulatorApp {
@@ -22,6 +23,7 @@ impl Default for EmulatorApp {
             errors: Vec::new(),
             emulator: gameboy_emu::Emulator::new(),
             open_file_dialog: None,
+            opened_rom: "No ROM loaded".to_string(),
         }
     }
 }
@@ -51,6 +53,8 @@ impl eframe::App for EmulatorApp {
 
                 ui.label(format!("Cycles: {}", self.cycles / 4));
 
+                ui.separator();
+
                 if ui.button("Load ROM").clicked() {
                     let filter = Box::new({
                         let ext = Some(OsStr::new("gb"));
@@ -61,6 +65,8 @@ impl eframe::App for EmulatorApp {
                     dialog.open();
                     self.open_file_dialog = Some(dialog);
                 }
+
+                ui.label(self.opened_rom.clone());
             });
         });
 
@@ -70,6 +76,9 @@ impl eframe::App for EmulatorApp {
         {
             if let Ok(rom) = std::fs::read(file) {
                 self.emulator.load_rom(rom);
+                self.opened_rom = file
+                    .file_name()
+                    .map_or("Unknown name".into(), |n| n.to_string_lossy().to_string());
             } else {
                 self.errors
                     .push(format!("Failed to read ROM: {}", file.display()));
