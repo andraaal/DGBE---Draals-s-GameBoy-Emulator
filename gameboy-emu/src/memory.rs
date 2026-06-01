@@ -88,7 +88,36 @@ impl Memory {
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
-        self.cart.write(address, value);
+        match address {
+            0x0000..0x0100 if self.io_registers[0x50] == 0 => {
+                self.errors.push(format!(
+                    "Attempted to write to BOOT ROM at address {:04X} while it is still mapped",
+                    address
+                ));
+            },
+            0xE000..=0xFDFF => {
+                // ECHO RAM: Mirror of 0xC000-0xDFFF
+                self.errors.push(format!(
+                    "Written to ECHO RAM at address {:04X}",
+                    address
+                ));
+                self.wram[address as usize - 0xE000] = value;
+            }
+            0xFEA0..=0xFEFF => {
+                // Unusable memory area
+                self.errors.push(format!(
+                    "Attempted to write to unusable memory at address {:04X}",
+                    address
+                ));
+            }
+            0x8000..=0x9FFF => self.vram[address as usize - 0x8000] = value,
+            0xC000..=0xDFFF => self.wram[address as usize - 0xC000] = value,
+            0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00] = value,
+            0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00] = value,
+            0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80] = value,
+            0xFFFF => self.ie_register = value,
+            _ => self.cart.write(address, value),
+        };
     }
 
     pub fn write_word(&mut self, address: u16, values: &[u8; 2]) {
