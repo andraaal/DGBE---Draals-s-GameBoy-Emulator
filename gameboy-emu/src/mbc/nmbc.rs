@@ -48,7 +48,7 @@ impl NMBC {
     pub fn write(&mut self, address: u16, value: u8) {
         match address {
             0xA000..=0xBFFF => {
-                if let Some(ref mut a) = self.ram_bank {
+                if let Some(a) = &mut self.ram_bank {
                     a[(address - 0xA000) as usize] = value;
                 }
             }

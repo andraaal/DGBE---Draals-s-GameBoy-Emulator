@@ -4,7 +4,7 @@ pub type MemoryError = String;
 
 pub struct Memory {
     header: Option<Header>,
-    cart: MBCType,
+    cart: Option<MBCType>,
     errors: Vec<String>, // To store any memory-related errors
 
     vram: [u8; 0x2000],       // Video RAM (0x8000 - 0x9FFF)
@@ -19,7 +19,7 @@ impl Memory {
     pub fn new() -> Self {
         Self {
             header: None,
-            cart: MBCType::NMBC(crate::mbc::nmbc::NMBC::new(vec![0; 0x8000], 0).unwrap()),
+            cart: None,
             errors: Vec::new(),
             vram: [0; 0x2000],
             wram: [0; 0x2000],
@@ -36,7 +36,7 @@ impl Memory {
         }
 
         // Guaranteed not to panic because of length check above and constant indexing
-        let header = crate::header::Header::parse(&rom[0x100..0x150].try_into().unwrap())?;
+        let header = Header::parse(&rom[0x100..0x150].try_into().unwrap())?;
 
         if rom.len() != header.rom_size {
             return Err(format!(
@@ -45,6 +45,11 @@ impl Memory {
                 header.rom_size
             ));
         }
+
+        let cart = MBCType::new(rom, &header)?;
+
+        self.header = Some(header);
+        self.cart = Some(cart);
         return Ok(());
     }
 
@@ -73,7 +78,17 @@ impl Memory {
             0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00],
             0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80],
             0xFFFF => self.ie_register,
-            _ => self.cart.read(address),
+            _ => {
+                if let Some(cart) = &self.cart {
+                    cart.read(address)
+                } else {
+                    self.errors.push(format!(
+                        "Attempted to read from cartridge at address {:04X} but no cartridge is loaded",
+                        address
+                    ));
+                    0xFF
+                }
+            }
         };
         res
     }
@@ -94,13 +109,11 @@ impl Memory {
                     "Attempted to write to BOOT ROM at address {:04X} while it is still mapped",
                     address
                 ));
-            },
+            }
             0xE000..=0xFDFF => {
                 // ECHO RAM: Mirror of 0xC000-0xDFFF
-                self.errors.push(format!(
-                    "Written to ECHO RAM at address {:04X}",
-                    address
-                ));
+                self.errors
+                    .push(format!("Written to ECHO RAM at address {:04X}", address));
                 self.wram[address as usize - 0xE000] = value;
             }
             0xFEA0..=0xFEFF => {
@@ -116,7 +129,16 @@ impl Memory {
             0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00] = value,
             0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80] = value,
             0xFFFF => self.ie_register = value,
-            _ => self.cart.write(address, value),
+            _ => {
+                if let Some(cart) = &mut self.cart {
+                    cart.write(address, value)
+                } else {
+                    self.errors.push(format!(
+                        "Attempted to read from cartridge at address {:04X} but no cartridge is loaded",
+                        address
+                    ));
+                }
+            }
         };
     }
 
