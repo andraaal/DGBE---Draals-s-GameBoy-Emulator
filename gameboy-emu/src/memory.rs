@@ -12,7 +12,7 @@ pub struct Memory {
     oam: [u8; 0xA0],          // Object Attribute Memory (OAM) (0xFE00 - 0xFE9F)
     io_registers: [u8; 0x80], // I/O registers (0xFF00 - 0xFF7F)
     hram: [u8; 0x7F],         // High RAM (0xFF80 - 0xFFFE)
-    ie_register: u8,          // Interrupt Enable Register (0xFFFF)
+    ime: u8,                  // Interrupt Master Enable (0xFFFF)
 }
 
 impl Memory {
@@ -26,7 +26,7 @@ impl Memory {
             oam: [0; 0xA0],
             io_registers: [0; 0x80],
             hram: [0; 0x7F],
-            ie_register: 0,
+            ime: 0,
         }
     }
 
@@ -77,7 +77,7 @@ impl Memory {
             0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00],
             0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00],
             0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80],
-            0xFFFF => self.ie_register,
+            0xFFFF => self.ime, // TODO: Create a separate function to access memory without restriction, so this can be an error
             _ => {
                 if let Some(cart) = &self.cart {
                     cart.read(address)
@@ -128,7 +128,7 @@ impl Memory {
             0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00] = value,
             0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00] = value,
             0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80] = value,
-            0xFFFF => self.ie_register = value,
+            0xFFFF => self.ime = value,
             _ => {
                 if let Some(cart) = &mut self.cart {
                     cart.write(address, value)
