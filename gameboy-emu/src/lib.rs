@@ -26,8 +26,8 @@ impl Emulator {
         Self { cpu }
     }
 
-    pub fn load_rom(&mut self, rom: Vec<u8>) {
-        self.cpu.load_rom(rom);
+    pub fn load_rom(&mut self, rom: Vec<u8>) -> Result<(), String> {
+        self.cpu.load_rom(rom)
     }
 
     pub fn step(&mut self) -> DebugView {

@@ -75,7 +75,9 @@ impl eframe::App for EmulatorApp {
             && let Some(file) = dialog.path()
         {
             if let Ok(rom) = std::fs::read(file) {
-                self.emulator.load_rom(rom);
+                if let Err(e) = self.emulator.load_rom(rom) {
+                    self.errors.push(e);
+                }
                 self.opened_rom = file
                     .file_name()
                     .map_or("Unknown name".into(), |n| n.to_string_lossy().to_string());
