@@ -7,9 +7,11 @@ pub struct Registers {
     pub e: u8,
     pub h: u8,
     pub l: u8,
-    pub f: u8,   // Flags register
-    pub pc: u16, // Program Counter
-    pub sp: u16, // Stack Pointer
+    pub f: u8,          // Flags register
+    pub pc: u16,        // Program Counter
+    pub sp: u16,        // Stack Pointer
+    pub ime: bool,      // Interrupt Master Enable Flag
+    pub ime_next: bool, // Enable IME after the next instruction
 }
 
 impl Registers {
@@ -25,6 +27,8 @@ impl Registers {
             f: 0,
             pc: 0x0000,
             sp: 0x0000,
+            ime: false,
+            ime_next: false,
         }
     }
 

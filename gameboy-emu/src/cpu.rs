@@ -5,8 +5,6 @@ pub(crate) struct CPU {
     memory: Memory,
     cycles: u64,
     reg: Registers,
-    ime: bool,
-    ime_enable_next: bool,
     executed_opcodes: Vec<(u16, u8)>,
     errors: Vec<String>,
 }
@@ -17,21 +15,26 @@ impl CPU {
             memory,
             cycles: 0,
             reg: Registers::new(),
-            ime: false,
-            ime_enable_next: false,
             executed_opcodes: Vec::new(),
             errors: Vec::new(),
         }
     }
 
-    pub(crate) fn load_rom(&mut self, rom: Vec<u8>) {
-        self.memory.load_rom(rom);
+    pub(crate) fn load_rom(&mut self, rom: Vec<u8>) -> Result<(), String> {
+        if let Err(e) = self.memory.load_rom(rom) {
+            let error = Err(format!("Failed to load ROM: {}", e));
+            self.errors.push(e);
+            error
+        } else {
+            Ok(())
+        }
     }
 
     pub(crate) fn debug_view(&mut self) -> crate::DebugView {
         let mut errors = std::mem::take(&mut self.errors);
         errors.append(&mut self.memory.take_errors());
-        
+        // NOTE: Should sort errors chronologically, and not just append; Probably won't matter since this system has to go anyways
+
         crate::DebugView {
             cycles: self.cycles,
             registers: self.reg,
@@ -50,16 +53,42 @@ impl CPU {
     }
 
     pub(crate) fn step(&mut self) {
+        // Check for Interrupts
+        let i_enable = self.memory.read_byte(0xFFFF);
+        let i_flag = self.memory.read_byte(0xFF0F);
+        let inter = i_enable & i_flag;
+        if self.reg.ime {
+            if inter & 0x01 != 0 {
+                // V-Blank Interrupt
+                self.handle_interrupt(0x40);
+                self.memory.write_byte(0xFF0F, i_flag & !0x01);
+            } else if inter & 0x02 != 0 {
+                // LCD STAT Interrupt
+                self.handle_interrupt(0x48);
+                self.memory.write_byte(0xFF0F, i_flag & !0x02);
+            } else if inter & 0x04 != 0 {
+                // Timer Interrupt
+                self.handle_interrupt(0x50);
+                self.memory.write_byte(0xFF0F, i_flag & !0x04);
+            } else if inter & 0x08 != 0 {
+                // Serial Interrupt
+                self.handle_interrupt(0x58);
+                self.memory.write_byte(0xFF0F, i_flag & !0x08);
+            } else if inter & 0x10 != 0 {
+                // Joypad Interrupt
+                self.handle_interrupt(0x60);
+                self.memory.write_byte(0xFF0F, i_flag & !0x10);
+            }
+        }
+
+        if self.reg.ime_next {
+            self.reg.ime = true;
+            self.reg.ime_next = false;
+        }
 
         let location = self.reg.pc;
         let opcode = self.fetch_byte();
         self.executed_opcodes.push((location, opcode));
-
-        
-        if self.ime_enable_next {
-            self.ime = true;
-            self.ime_enable_next = false;
-        }
 
         let duration = match opcode {
             // Miscellaneous Instructions
@@ -603,7 +632,7 @@ impl CPU {
             0xD9 => {
                 // RETI
                 self.reg.pc = self.pop_word();
-                self.ime = true;
+                self.reg.ime = true;
                 16
             }
             0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => {
@@ -663,13 +692,13 @@ impl CPU {
             // Interrupt control
             0xF3 => {
                 // DI
-                self.ime = false;
-                self.ime_enable_next = false;
+                self.reg.ime = false;
+                self.reg.ime_next = false;
                 4
             }
             0xFB => {
                 // EI
-                self.ime_enable_next = true;
+                self.reg.ime_next = true;
                 4
             }
 
@@ -686,6 +715,13 @@ impl CPU {
         };
 
         self.cycles += duration;
+    }
+
+    fn handle_interrupt(&mut self, address: u16) {
+        self.reg.ime = false;
+        self.push_word(self.reg.pc);
+        self.reg.pc = address;
+        self.cycles += 20;
     }
 
     fn execute_opcode_extension(&mut self) -> u64 {

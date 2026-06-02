@@ -121,6 +121,22 @@ impl eframe::App for EmulatorApp {
                 ui.label(format!("Register F: 0b{:08b}", self.registers.f));
                 ui.label(format!("Program Counter: 0x{:04X}", self.registers.pc));
                 ui.label(format!("Stack Pointer: 0x{:04X}", self.registers.sp));
+                ui.label(format!(
+                    "IME: {}",
+                    if self.registers.ime {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }
+                ));
+                ui.label(format!(
+                    "IME Next: {}",
+                    if self.registers.ime_next {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }
+                ));
 
                 ui.separator();
 
