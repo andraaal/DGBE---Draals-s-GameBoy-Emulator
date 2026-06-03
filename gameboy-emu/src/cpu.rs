@@ -502,10 +502,9 @@ impl CPU {
             }
             0x3F => {
                 // CCF
-                let current_carry = self.reg.get_c_flag();
                 self.reg.set_n_flag(false);
                 self.reg.set_h_flag(false);
-                self.reg.set_c_flag(!current_carry);
+                self.reg.set_c_flag(!self.reg.get_c_flag());
                 4
             }
 
@@ -728,7 +727,6 @@ impl CPU {
         let opcode = self.fetch_byte();
         let register_index = opcode & 0x07;
         let mut value = self.read_r8(register_index);
-        let mut write_back = true;
 
         match opcode {
             0x00..=0x07 => value = self.rlc(value, true), // RLC r8
@@ -743,7 +741,6 @@ impl CPU {
                 // BIT b3,r8
                 let bit = (opcode >> 3) & 0x07;
                 self.bit(value, bit);
-                write_back = false;
             }
             0x80..=0xBF => {
                 // RES b3,r8
@@ -757,9 +754,8 @@ impl CPU {
             }
         }
 
-        if write_back {
-            self.write_r8(register_index, value);
-        }
+        // Since the values is unchanged for BIT operations, nothing will be changed
+        self.write_r8(register_index, value);
 
         if register_index == 0x06 {
             if (0x40..=0x7F).contains(&opcode) {
@@ -900,23 +896,23 @@ impl CPU {
         let mut adjustment = 0;
         let mut carry = self.reg.get_c_flag();
 
-        if !self.reg.get_n_flag() {
+        if self.reg.get_n_flag() {
+            if self.reg.get_h_flag() {
+                adjustment += 0x06;
+            }
+            if carry {
+                adjustment += 0x60;
+            }
+            a = a.wrapping_sub(adjustment);
+        } else {
             if self.reg.get_h_flag() || (a & 0x0F) > 0x09 {
-                adjustment |= 0x06;
+                adjustment += 0x06;
             }
             if carry || a > 0x99 {
-                adjustment |= 0x60;
+                adjustment += 0x60;
                 carry = true;
             }
             a = a.wrapping_add(adjustment);
-        } else {
-            if self.reg.get_h_flag() {
-                adjustment |= 0x06;
-            }
-            if carry {
-                adjustment |= 0x60;
-            }
-            a = a.wrapping_sub(adjustment);
         }
 
         self.reg.a = a;

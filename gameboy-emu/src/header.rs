@@ -1,5 +1,6 @@
 use crate::memory::MemoryError;
 
+#[expect(dead_code)]
 pub(crate) struct Header {
     pub title: String,
     pub manufacturer_code: String,
