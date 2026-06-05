@@ -1,8 +1,10 @@
 use crate::memory::Memory;
+use crate::ppu::PPU;
 use crate::registers::Registers;
 
 pub(crate) struct CPU {
     memory: Memory,
+    ppu: PPU,
     cycles: u64,
     reg: Registers,
     executed_opcodes: Vec<(u16, u8)>,
@@ -13,6 +15,7 @@ impl CPU {
     pub(crate) fn new(memory: Memory) -> Self {
         Self {
             memory,
+            ppu: PPU::new(),
             cycles: 0,
             reg: Registers::new(),
             executed_opcodes: Vec::new(),
@@ -53,6 +56,9 @@ impl CPU {
     }
 
     pub(crate) fn step(&mut self) {
+        // Step the PPU for the current cycle
+        self.ppu.step_cycle(&mut self.memory);
+
         // Check for Interrupts
         let i_enable = self.memory.read_byte(0xFFFF);
         let i_flag = self.memory.read_byte(0xFF0F);

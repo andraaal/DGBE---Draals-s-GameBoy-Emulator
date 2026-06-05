@@ -13,6 +13,9 @@ pub struct Memory {
     io_registers: [u8; 0x80], // I/O registers (0xFF00 - 0xFF7F)
     hram: [u8; 0x7F],         // High RAM (0xFF80 - 0xFFFE)
     ime: u8,                  // Interrupt Master Enable (0xFFFF)
+
+    // These variables are used to track if certain memory areas are currently accessible by the cpu or used by the ppu or dma.
+    pub oam_access: bool,
 }
 
 impl Memory {
@@ -27,6 +30,7 @@ impl Memory {
             io_registers: [0; 0x80],
             hram: [0; 0x7F],
             ime: 0,
+            oam_access: true,
         }
     }
 
@@ -151,6 +155,55 @@ impl Memory {
         self.write_byte(address + 1, values[1]);
     }
 
+    /// This function is used to access all memory unconditionally, ignoring any access restrictions. It is used for cpu and ppu intrinsics and (hopefully soon) debugging tools.
+    /// It guarantees not changing any state, nor creating errors.
+    pub fn get_byte(&self, address: u16) -> u8 {
+        match address {
+            0x0000..0x0100 if self.io_registers[0x50] == 0 => BOOT[address as usize],
+            0xE000..=0xFDFF => self.wram[address as usize - 0xE000],
+            0xFEA0..=0xFEFF => 0x00, // Unusable memory area returns 0x00
+            0x8000..=0x9FFF => self.vram[address as usize - 0x8000],
+            0xC000..=0xDFFF => self.wram[address as usize - 0xC000],
+            0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00],
+            0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00],
+            0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80],
+            0xFFFF => self.ime,
+            _ => {
+                if let Some(cart) = &self.cart {
+                    cart.read(address)
+                } else {
+                    0xFF
+                }
+            }
+        }
+    }
+
+    /// This function is used to access all memory unconditionally, ignoring any access restrictions. It is used for cpu and ppu intrinsics and (hopefully soon) debugging tools.
+    /// It guarantees that no errors are produced.
+    pub fn set_byte(&mut self, address: u16, value: u8) {
+        match address {
+            0x0000..0x0100 if self.io_registers[0x50] == 0 => {
+                // Cannot change BOOT ROM
+            }
+            0xE000..=0xFDFF => self.wram[address as usize - 0xE000] = value,
+            0xFEA0..=0xFEFF => {
+                // Memory is always 0x00
+            }
+            0x8000..=0x9FFF => self.vram[address as usize - 0x8000] = value,
+            0xC000..=0xDFFF => self.wram[address as usize - 0xC000] = value,
+            0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00] = value,
+            0xFF00..=0xFF7F => self.io_registers[address as usize - 0xFF00] = value,
+            0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80] = value,
+            0xFFFF => self.ime = value,
+            _ => {
+                if let Some(cart) = &mut self.cart {
+                    cart.write(address, value);
+                };
+            }
+        };
+    }
+
+    /// Clears and returns all errors that have been recorded since the last call to this function.
     pub fn take_errors(&mut self) -> Vec<String> {
         std::mem::take(&mut self.errors)
     }
