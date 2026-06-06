@@ -1,3 +1,5 @@
+
+
 use crate::{header::Header, mbc::MBCType};
 
 pub type MemoryError = String;
@@ -16,6 +18,7 @@ pub struct Memory {
 
     // These variables are used to track if certain memory areas are currently accessible by the cpu or used by the ppu or dma.
     pub oam_access: bool,
+    pub vram_access: bool,
 }
 
 impl Memory {
@@ -31,6 +34,7 @@ impl Memory {
             hram: [0; 0x7F],
             ime: 0,
             oam_access: true,
+            vram_access: true,
         }
     }
 

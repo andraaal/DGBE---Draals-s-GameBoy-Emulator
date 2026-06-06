@@ -1,6 +1,5 @@
 mod cpu;
 mod header;
-mod io_registers;
 mod mbc;
 mod memory;
 mod ppu;

@@ -8,3 +8,4 @@ Notes, in case my future self can't remember
 ## IDEAS
 - Add actual disassembly + display current instruction / allow manual jumping
 - Add memory viewer + editor
+- Make struct for io registers to provide named access
