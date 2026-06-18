@@ -36,6 +36,13 @@ impl Emulator {
         self.cpu.debug_view()
     }
 
+    pub fn step_frame(&mut self) -> DebugView {
+        for _ in 0..70224 {
+            self.cpu.step();
+        }
+        self.cpu.debug_view()
+    }
+
     pub fn run(&mut self) -> DebugView {
         self.cpu.execute();
         self.cpu.debug_view()
