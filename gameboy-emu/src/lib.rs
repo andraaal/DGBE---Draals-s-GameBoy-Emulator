@@ -40,7 +40,7 @@ impl Emulator {
     }
 
     pub fn step_frame(&mut self) -> DebugView {
-        for _ in 0..70224 {
+        while self.cpu.cycles < 70224 / 4 {
             self.cpu.step();
         }
         self.cpu.debug_view()

@@ -5,7 +5,7 @@ use crate::registers::Registers;
 pub(crate) struct CPU {
     memory: Memory,
     ppu: PPU,
-    cycles: u64,
+    pub cycles: u64,
     reg: Registers,
     executed_opcodes: Vec<(u16, u8)>,
     errors: Vec<String>,
@@ -57,9 +57,6 @@ impl CPU {
     }
 
     pub(crate) fn step(&mut self) {
-        // Step the PPU for the current cycle
-        self.ppu.step_mcycle(&mut self.memory);
-
         // Check for Interrupts
         let i_enable = self.memory.read_byte(0xFFFF);
         let i_flag = self.memory.read_byte(0xFF0F);
@@ -99,7 +96,7 @@ impl CPU {
 
         let duration = match opcode {
             // Miscellaneous Instructions
-            0x00 => 4, // NOP
+            0x00 => 1, // NOP
             0xCB => {
                 // Prefix for bit operations
                 self.execute_opcode_extension()
@@ -112,31 +109,31 @@ impl CPU {
                 // LD BC,d16
                 let value = self.fetch_word();
                 self.reg.set_bc(value);
-                12
+                3
             }
             0x11 => {
                 // LD DE,d16
                 let value = self.fetch_word();
                 self.reg.set_de(value);
-                12
+                3
             }
             0x21 => {
                 // LD HL,d16
                 let value = self.fetch_word();
                 self.reg.set_hl(value);
-                12
+                3
             }
             0x31 => {
                 // LD SP,d16
                 let value = self.fetch_word();
                 self.reg.sp = value;
-                12
+                3
             }
             0x08 => {
                 // LD (a16),SP
                 let address = self.fetch_word();
                 self.memory.write_word(address, &self.reg.sp.to_le_bytes());
-                20
+                5
             }
 
             // 8bit Load Instructions between registers
@@ -146,7 +143,7 @@ impl CPU {
                 let source = opcode & 0x07;
                 let value = self.read_r8(source);
                 self.write_r8(dest, value);
-                if source == 0x06 || dest == 0x06 { 8 } else { 4 }
+                if source == 0x06 || dest == 0x06 { 2 } else { 1 }
             }
 
             // 8bit Load Instructions between registers and constants
@@ -154,93 +151,93 @@ impl CPU {
                 // LD r8,d8 or LD (HL),d8
                 let value = self.fetch_byte();
                 self.write_r8(opcode >> 3, value);
-                if opcode == 0x36 { 12 } else { 8 }
+                if opcode == 0x36 { 3 } else { 2 }
             }
 
             // 8bit Load Instructions between registers and memory
             0x02 => {
                 // LD (BC),A
                 self.memory.write_byte(self.reg.get_bc(), self.reg.a);
-                8
+                2
             }
             0x12 => {
                 // LD (DE),A
                 self.memory.write_byte(self.reg.get_de(), self.reg.a);
-                8
+                2
             }
             0x0A => {
                 // LD A,(BC)
                 self.reg.a = self.memory.read_byte(self.reg.get_bc());
-                8
+                2
             }
             0x1A => {
                 // LD A,(DE)
                 self.reg.a = self.memory.read_byte(self.reg.get_de());
-                8
+                2
             }
             0x22 => {
                 // LD (HL+),A
                 let hl = self.reg.get_hl();
                 self.memory.write_byte(hl, self.reg.a);
                 self.reg.set_hl(hl.wrapping_add(1));
-                8
+                2
             }
             0x32 => {
                 // LD (HL-),A
                 let hl = self.reg.get_hl();
                 self.memory.write_byte(hl, self.reg.a);
                 self.reg.set_hl(hl.wrapping_sub(1));
-                8
+                2
             }
             0x2A => {
                 // LD A,(HL+)
                 let hl = self.reg.get_hl();
                 self.reg.a = self.memory.read_byte(hl);
                 self.reg.set_hl(hl.wrapping_add(1));
-                8
+                2
             }
             0x3A => {
                 // LD A,(HL-)
                 let hl = self.reg.get_hl();
                 self.reg.a = self.memory.read_byte(hl);
                 self.reg.set_hl(hl.wrapping_sub(1));
-                8
+                2
             }
             0xE0 => {
                 // LDH (a8),A
                 let address = 0xFF00 + self.fetch_byte() as u16;
                 self.memory.write_byte(address, self.reg.a);
-                12
+                3
             }
             0xE2 => {
                 // LD (C+0xFF00),A
                 let address = 0xFF00 + self.reg.c as u16;
                 self.memory.write_byte(address, self.reg.a);
-                8
+                2
             }
             0xEA => {
                 // LD (a16),A
                 let address = self.fetch_word();
                 self.memory.write_byte(address, self.reg.a);
-                16
+                4
             }
             0xF0 => {
                 // LDH A,(a8)
                 let address = 0xFF00 + self.fetch_byte() as u16;
                 self.reg.a = self.memory.read_byte(address);
-                12
+                3
             }
             0xF2 => {
                 // LD A,(C+0xFF00)
                 let address = 0xFF00 + self.reg.c as u16;
                 self.reg.a = self.memory.read_byte(address);
-                8
+                2
             }
             0xFA => {
                 // LD A,(a16)
                 let address = self.fetch_word();
                 self.reg.a = self.memory.read_byte(address);
-                16
+                4
             }
 
             // 16bit Load Instructions between registers and memory
@@ -255,12 +252,12 @@ impl CPU {
                     .set_h_flag(((self.reg.sp & 0x0F) + (offset & 0x0F)) > 0x0F);
                 self.reg
                     .set_c_flag(((self.reg.sp & 0xFF) + (offset & 0xFF)) > 0xFF);
-                12
+                3
             }
             0xF9 => {
                 // LD SP,HL
                 self.reg.sp = self.reg.get_hl();
-                8
+                2
             }
 
             // Arithmetic Instructions
@@ -268,62 +265,62 @@ impl CPU {
             0x03 => {
                 // INC BC
                 self.reg.set_bc(self.reg.get_bc().wrapping_add(1));
-                8
+                2
             }
             0x13 => {
                 // INC DE
                 self.reg.set_de(self.reg.get_de().wrapping_add(1));
-                8
+                2
             }
             0x23 => {
                 // INC HL
                 self.reg.set_hl(self.reg.get_hl().wrapping_add(1));
-                8
+                2
             }
             0x33 => {
                 // INC SP
                 self.reg.sp = self.reg.sp.wrapping_add(1);
-                8
+                2
             }
             0x0B => {
                 // DEC BC
                 self.reg.set_bc(self.reg.get_bc().wrapping_sub(1));
-                8
+                2
             }
             0x1B => {
                 // DEC DE
                 self.reg.set_de(self.reg.get_de().wrapping_sub(1));
-                8
+                2
             }
             0x2B => {
                 // DEC HL
                 self.reg.set_hl(self.reg.get_hl().wrapping_sub(1));
-                8
+                2
             }
             0x3B => {
                 // DEC SP
                 self.reg.sp = self.reg.sp.wrapping_sub(1);
-                8
+                2
             }
             0x09 => {
                 // ADD HL,BC
                 self.add_to_hl(self.reg.get_bc());
-                8
+                2
             }
             0x19 => {
                 // ADD HL,DE
                 self.add_to_hl(self.reg.get_de());
-                8
+                2
             }
             0x29 => {
                 // ADD HL,HL
                 self.add_to_hl(self.reg.get_hl());
-                8
+                2
             }
             0x39 => {
                 // ADD HL,SP
                 self.add_to_hl(self.reg.sp);
-                8
+                2
             }
             0xE8 => {
                 // ADD SP,r8
@@ -334,39 +331,39 @@ impl CPU {
                 self.reg.set_n_flag(false);
                 self.reg.set_h_flag(((sp & 0x0F) + (offset & 0x0F)) > 0x0F);
                 self.reg.set_c_flag(((sp & 0xFF) + (offset & 0xFF)) > 0xFF);
-                16
+                4
             }
 
             // 8bit arithmetic instructions
             0x04 => {
                 // INC B
                 self.reg.b = self.inc_u8(self.reg.b);
-                4
+                1
             }
             0x0C => {
                 // INC C
                 self.reg.c = self.inc_u8(self.reg.c);
-                4
+                1
             }
             0x14 => {
                 // INC D
                 self.reg.d = self.inc_u8(self.reg.d);
-                4
+                1
             }
             0x1C => {
                 // INC E
                 self.reg.e = self.inc_u8(self.reg.e);
-                4
+                1
             }
             0x24 => {
                 // INC H
                 self.reg.h = self.inc_u8(self.reg.h);
-                4
+                1
             }
             0x2C => {
                 // INC L
                 self.reg.l = self.inc_u8(self.reg.l);
-                4
+                1
             }
             0x34 => {
                 // INC (HL)
@@ -374,42 +371,42 @@ impl CPU {
                 let value = self.memory.read_byte(hl);
                 let incremented = self.inc_u8(value);
                 self.memory.write_byte(hl, incremented);
-                12
+                3
             }
             0x3C => {
                 // INC A
                 self.reg.a = self.inc_u8(self.reg.a);
-                4
+                1
             }
             0x05 => {
                 // DEC B
                 self.reg.b = self.dec_u8(self.reg.b);
-                4
+                1
             }
             0x0D => {
                 // DEC C
                 self.reg.c = self.dec_u8(self.reg.c);
-                4
+                1
             }
             0x15 => {
                 // DEC D
                 self.reg.d = self.dec_u8(self.reg.d);
-                4
+                1
             }
             0x1D => {
                 // DEC E
                 self.reg.e = self.dec_u8(self.reg.e);
-                4
+                1
             }
             0x25 => {
                 // DEC H
                 self.reg.h = self.dec_u8(self.reg.h);
-                4
+                1
             }
             0x2D => {
                 // DEC L
                 self.reg.l = self.dec_u8(self.reg.l);
-                4
+                1
             }
             0x35 => {
                 // DEC (HL)
@@ -417,12 +414,12 @@ impl CPU {
                 let value = self.memory.read_byte(hl);
                 let decremented = self.dec_u8(value);
                 self.memory.write_byte(hl, decremented);
-                12
+                3
             }
             0x3D => {
                 // DEC A
                 self.reg.a = self.dec_u8(self.reg.a);
-                4
+                1
             }
             0x80..=0xBF => {
                 let source = opcode & 0x07;
@@ -438,81 +435,81 @@ impl CPU {
                     0xB8 => self.cp_a(value),              // CP A,r8
                     _ => unreachable!(),
                 }
-                if source == 0x06 { 8 } else { 4 }
+                if source == 0x06 { 2 } else { 1 }
             }
             0xC6 => {
                 // ADD A,d8
                 let value = self.fetch_byte();
                 self.add_to_a(value, false);
-                8
+                2
             }
             0xCE => {
                 // ADC A,d8
                 let value = self.fetch_byte();
                 self.add_to_a(value, true);
-                8
+                2
             }
             0xD6 => {
                 // SUB A,d8
                 let value = self.fetch_byte();
                 self.sub_from_a(value, false);
-                8
+                2
             }
             0xDE => {
                 // SBC A,d8
                 let value = self.fetch_byte();
                 self.sub_from_a(value, true);
-                8
+                2
             }
             0xE6 => {
                 // AND A,d8
                 let value = self.fetch_byte();
                 self.and_a(value);
-                8
+                2
             }
             0xEE => {
                 // XOR A,d8
                 let value = self.fetch_byte();
                 self.xor_a(value);
-                8
+                2
             }
             0xF6 => {
                 // OR A,d8
                 let value = self.fetch_byte();
                 self.or_a(value);
-                8
+                2
             }
             0xFE => {
                 // CP A,d8
                 let value = self.fetch_byte();
                 self.cp_a(value);
-                8
+                2
             }
             0x27 => {
                 // DAA
                 self.daa();
-                4
+                1
             }
             0x2F => {
                 // CPL
                 self.reg.a = !self.reg.a;
                 self.reg.set_n_flag(true);
                 self.reg.set_h_flag(true);
-                4
+                1
             }
             0x37 => {
                 // SCF
                 self.reg.set_n_flag(false);
                 self.reg.set_h_flag(false);
                 self.reg.set_c_flag(true);
-                4
+                1
             }
             0x3F => {
                 // CCF
                 self.reg.set_n_flag(false);
                 self.reg.set_h_flag(false);
                 self.reg.set_c_flag(!self.reg.get_c_flag());
-                4
+                1
             }
 
             // Rotates and shifts (non-CB)
@@ -520,25 +517,25 @@ impl CPU {
                 // RLCA
                 self.reg.a = self.rlc(self.reg.a, false);
                 self.reg.set_z_flag(false);
-                4
+                1
             }
             0x0F => {
                 // RRCA
                 self.reg.a = self.rrc(self.reg.a, false);
                 self.reg.set_z_flag(false);
-                4
+                1
             }
             0x17 => {
                 // RLA
                 self.reg.a = self.rl(self.reg.a, false);
                 self.reg.set_z_flag(false);
-                4
+                1
             }
             0x1F => {
                 // RRA
                 self.reg.a = self.rr(self.reg.a, false);
                 self.reg.set_z_flag(false);
-                4
+                1
             }
 
             // Jump / Call / Return / Restart instructions
@@ -546,7 +543,7 @@ impl CPU {
                 // JR r8
                 let offset = self.fetch_byte() as i8;
                 self.reg.pc = self.reg.pc.wrapping_add_signed(offset as i16);
-                12
+                3
             }
             0x20 => {
                 // JR NZ,r8
@@ -572,7 +569,7 @@ impl CPU {
                 // JP a16
                 let address = self.fetch_word();
                 self.reg.pc = address;
-                16
+                4
             }
             0xCA => {
                 // JP Z,a16
@@ -589,7 +586,7 @@ impl CPU {
             0xE9 => {
                 // JP HL
                 self.reg.pc = self.reg.get_hl();
-                4
+                1
             }
             0xC4 => {
                 // CALL NZ,a16
@@ -604,7 +601,7 @@ impl CPU {
                 let address = self.fetch_word();
                 self.push_word(self.reg.pc);
                 self.reg.pc = address;
-                24
+                6
             }
             0xD4 => {
                 // CALL NC,a16
@@ -625,7 +622,7 @@ impl CPU {
             0xC9 => {
                 // RET
                 self.reg.pc = self.pop_word();
-                16
+                4
             }
             0xD0 => {
                 // RET NC
@@ -639,14 +636,14 @@ impl CPU {
                 // RETI
                 self.reg.pc = self.pop_word();
                 self.reg.ime = true;
-                16
+                4
             }
             0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => {
                 // RST vec
                 let target = (opcode & 0b0011_1000) as u16;
                 self.push_word(self.reg.pc);
                 self.reg.pc = target;
-                16
+                4
             }
 
             // Stack instructions
@@ -654,45 +651,45 @@ impl CPU {
                 // POP BC
                 let value = self.pop_word();
                 self.reg.set_bc(value);
-                12
+                3
             }
             0xD1 => {
                 // POP DE
                 let value = self.pop_word();
                 self.reg.set_de(value);
-                12
+                3
             }
             0xE1 => {
                 // POP HL
                 let value = self.pop_word();
                 self.reg.set_hl(value);
-                12
+                3
             }
             0xF1 => {
                 // POP AF
                 let value = self.pop_word();
                 self.reg.set_af(value);
-                12
+                3
             }
             0xC5 => {
                 // PUSH BC
                 self.push_word(self.reg.get_bc());
-                16
+                4
             }
             0xD5 => {
                 // PUSH DE
                 self.push_word(self.reg.get_de());
-                16
+                4
             }
             0xE5 => {
                 // PUSH HL
                 self.push_word(self.reg.get_hl());
-                16
+                4
             }
             0xF5 => {
                 // PUSH AF
                 self.push_word(self.reg.get_af());
-                16
+                4
             }
 
             // Interrupt control
@@ -700,12 +697,12 @@ impl CPU {
                 // DI
                 self.reg.ime = false;
                 self.reg.ime_next = false;
-                4
+                1
             }
             0xFB => {
                 // EI
                 self.reg.ime_next = true;
-                4
+                1
             }
 
             _ => {
@@ -721,13 +718,23 @@ impl CPU {
         };
 
         self.cycles += duration;
+
+        // Step the PPU for the current cycle
+        for _ in 0..duration {
+            self.ppu.step_mcycle(&mut self.memory);
+        }
     }
 
     fn handle_interrupt(&mut self, address: u16) {
         self.reg.ime = false;
         self.push_word(self.reg.pc);
         self.reg.pc = address;
-        self.cycles += 20;
+        self.cycles += 5;
+
+        // Step the PPU for the current cycle
+        for _ in 0..5 {
+            self.ppu.step_mcycle(&mut self.memory);
+        }
     }
 
     fn execute_opcode_extension(&mut self) -> u64 {
@@ -761,17 +768,17 @@ impl CPU {
             }
         }
 
-        // Since the values is unchanged for BIT operations, nothing will be changed
+        // Since the value is unchanged for BIT operations, nothing will change
         self.write_r8(register_index, value);
 
         if register_index == 0x06 {
             if (0x40..=0x7F).contains(&opcode) {
-                12
+                3
             } else {
-                16
+                4
             }
         } else {
-            8
+            2
         }
     }
 
@@ -932,9 +939,9 @@ impl CPU {
         let offset = self.fetch_byte() as i8;
         if condition {
             self.reg.pc = self.reg.pc.wrapping_add_signed(offset as i16);
-            12
+            3
         } else {
-            8
+            2
         }
     }
 
@@ -942,9 +949,9 @@ impl CPU {
         let address = self.fetch_word();
         if condition {
             self.reg.pc = address;
-            16
+            4
         } else {
-            12
+            3
         }
     }
 
@@ -953,18 +960,18 @@ impl CPU {
         if condition {
             self.push_word(self.reg.pc);
             self.reg.pc = address;
-            24
+            6
         } else {
-            12
+            3
         }
     }
 
     fn ret_cond(&mut self, condition: bool) -> u64 {
         if condition {
             self.reg.pc = self.pop_word();
-            20
+            5
         } else {
-            8
+            2
         }
     }
 

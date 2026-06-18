@@ -12,7 +12,7 @@ pub(crate) struct PPU {
     scanline: u8,
     /// Currently drawn dot in line
     dot: u8,
-    /// Current t-cycle in line
+    /// Current t-cycle in line, resets after 456 t-cycles
     tcycle: u16,
     /// Delay counter in t-cycles
     delay: usize,
@@ -65,7 +65,7 @@ impl PPU {
     }
 
     pub fn step_mcycle(&mut self, memory: &mut Memory) {
-        for _ in 0..3 {
+        for _ in 0..4 {
             self.step_tcycle(memory);
         }
     }
@@ -87,16 +87,18 @@ impl PPU {
 
         self.exec_tcycle(memory);
         println!(
-            "Successfully executed tcycle {} in mode {:?}",
-            self.tcycle, self.mode
+            "Successfully executed tcycle {} in mode {:?} (frame: {}, line: {}, dot: {})",
+            self.tcycle, self.mode, self.frame, self.scanline, self.dot
         );
 
         self.tcycle += 1;
-        if self.tcycle == 80 {
+        if self.tcycle == 80 && self.mode == PPUState::OAMScan {
             self.set_mode(PPUState::Drawing, memory);
-        } else if self.dot == 160 {
+        } else if self.dot == 160 && self.mode == PPUState::Drawing {
             self.set_mode(PPUState::HBlank, memory);
+            self.dot = 0;
         } else if self.tcycle == 456 {
+            // println!("Drew line {} (frame: {})", self.scanline, self.frame);
             self.tcycle = 0;
             self.scanline += 1;
 

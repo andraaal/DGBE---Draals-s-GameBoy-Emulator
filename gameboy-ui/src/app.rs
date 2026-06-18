@@ -68,7 +68,7 @@ impl eframe::App for EmulatorApp {
 
                 ui.separator();
 
-                ui.label(format!("Cycles: {}", self.cycles / 4));
+                ui.label(format!("Cycles: {}", self.cycles));
 
                 ui.separator();
 
