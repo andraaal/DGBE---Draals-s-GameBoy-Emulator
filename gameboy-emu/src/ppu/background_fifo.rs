@@ -69,7 +69,7 @@ impl BackgroundFIFO {
                 } else {
                     // In this mode, the tile number is a signed byte, so we need to convert it to a signed value first.
                     let signed_tile_number = tile_number as i8;
-                    (0x9000 as u16).saturating_add_signed(signed_tile_number as i16) * 16
+                    (0x9000 as u16).saturating_add_signed(signed_tile_number as i16 * 16)
                 };
 
                 let low_data = memory.get_byte(tile_data_address);
@@ -86,7 +86,7 @@ impl BackgroundFIFO {
                     0x8000 + (tile_number as u16) * 16
                 } else {
                     let signed_tile_number = tile_number as i8;
-                    (0x9000 as u16).saturating_add_signed(signed_tile_number as i16) * 16
+                    (0x9000 as u16).saturating_add_signed(signed_tile_number as i16 * 16)
                 };
 
                 let high_data = memory.get_byte(tile_data_address + 1);

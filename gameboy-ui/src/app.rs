@@ -12,6 +12,7 @@ pub(crate) struct EmulatorApp {
     emulator: gameboy_emu::Emulator,
     open_file_dialog: Option<FileDialog>,
     opened_rom: String,
+    screen: Option<egui::TextureHandle>,
 }
 
 impl Default for EmulatorApp {
@@ -24,6 +25,7 @@ impl Default for EmulatorApp {
             emulator: gameboy_emu::Emulator::new(),
             open_file_dialog: None,
             opened_rom: "No ROM loaded".to_string(),
+            screen: None,
         }
     }
 }
@@ -45,6 +47,21 @@ impl eframe::App for EmulatorApp {
                 if ui.button("Step").clicked() {
                     let view = self.emulator.step();
                     self.parse_view(view);
+
+                    ui.request_repaint();
+                }
+
+                if ui.button("Step Frame").clicked() {
+                    let view = self.emulator.step_frame();
+                    self.parse_view(view.clone());
+
+                    let image = self.create_texture(view.framebuffer);
+                    if let Some(screen) = &mut self.screen {
+                        screen.set(image, egui::TextureOptions::NEAREST);
+                    } else {
+                        self.screen =
+                            Some(ui.load_texture("screen", image, egui::TextureOptions::NEAREST));
+                    }
 
                     ui.request_repaint();
                 }
@@ -189,4 +206,22 @@ impl EmulatorApp {
         self.opcodes.append(&mut view.opcodes);
         self.errors.append(&mut view.errors);
     }
+
+    fn create_texture(&self, framebuffer: [[u8; 160]; 144]) -> egui::ColorImage {
+        let pixels = framebuffer
+            .iter()
+            .flatten()
+            .map(|&color| PALETTE[color as usize])
+            .collect::<Vec<_>>();
+
+        let image = egui::ColorImage::new([160, 144], pixels);
+        image
+    }
 }
+
+const PALETTE: [egui::Color32; 4] = [
+    egui::Color32::WHITE,
+    egui::Color32::LIGHT_GRAY,
+    egui::Color32::DARK_GRAY,
+    egui::Color32::BLACK,
+];

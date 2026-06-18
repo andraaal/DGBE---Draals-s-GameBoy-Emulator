@@ -43,6 +43,7 @@ impl CPU {
             registers: self.reg,
             opcodes: std::mem::take(&mut self.executed_opcodes),
             errors: errors,
+            framebuffer: self.ppu.get_framebuffer().clone(),
         }
     }
 

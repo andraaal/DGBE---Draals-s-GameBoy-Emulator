@@ -9,15 +9,18 @@ pub struct Emulator {
     cpu: crate::cpu::CPU,
 }
 
+#[derive(Debug, Clone)]
 pub struct DebugView {
     /// The total number of cycles since the emulator started.
     pub cycles: u64,
     /// The current value of the registers.
     pub registers: registers::Registers,
-    /// All opcodes executed since the last debug view was generated.
+    /// All opcodes and their index in memory executed since the last debug view was generated.
     pub opcodes: Vec<(u16, u8)>,
     /// Any errors encountered during execution (e.g., unknown opcodes).
     pub errors: Vec<String>,
+    /// The framebuffer
+    pub framebuffer: [[u8; 160]; 144],
 }
 
 impl Emulator {

@@ -60,6 +60,10 @@ impl PPU {
         }
     }
 
+    pub fn get_framebuffer(&self) -> &[[u8; 160]; 144] {
+        &self.framebuffer
+    }
+
     pub fn step_mcycle(&mut self, memory: &mut Memory) {
         for _ in 0..3 {
             self.step_tcycle(memory);
@@ -82,6 +86,10 @@ impl PPU {
         }
 
         self.exec_tcycle(memory);
+        println!(
+            "Successfully executed tcycle {} in mode {:?}",
+            self.tcycle, self.mode
+        );
 
         self.tcycle += 1;
         if self.tcycle == 80 {
