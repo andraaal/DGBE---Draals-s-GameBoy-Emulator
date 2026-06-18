@@ -1,5 +1,3 @@
-
-
 use crate::{header::Header, mbc::MBCType};
 
 pub type MemoryError = String;
@@ -205,6 +203,17 @@ impl Memory {
                 };
             }
         };
+    }
+
+    /// Sets the IF register to request the given interrupt.
+    /// Interrupts are 0: VBlank, 1: LCD STAT, 2: Timer, 3: Serial, 4: Joypad
+    pub fn trigger_interrupt(&mut self, interrupt: u8) {
+        assert!(
+            interrupt < 5,
+            "Interrupt number must be between 0 and 4, got {}",
+            interrupt
+        );
+        self.io_registers[0x41] |= 1 << interrupt;
     }
 
     /// Clears and returns all errors that have been recorded since the last call to this function.

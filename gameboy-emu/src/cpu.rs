@@ -57,7 +57,7 @@ impl CPU {
 
     pub(crate) fn step(&mut self) {
         // Step the PPU for the current cycle
-        self.ppu.step_cycle(&mut self.memory);
+        self.ppu.step_mcycle(&mut self.memory);
 
         // Check for Interrupts
         let i_enable = self.memory.read_byte(0xFFFF);

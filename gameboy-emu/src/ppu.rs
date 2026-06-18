@@ -1,35 +1,52 @@
 mod background_fifo;
 
+use crate::memory::Memory;
 use background_fifo::BackgroundFIFO;
 
 pub(crate) struct PPU {
     // General state
-    scanline: u8,
-    tcycle: u16,
+    // Note to self: Everything is 0-based
+    /// Frame number
     frame: u64,
+    /// Currently drawn line
+    scanline: u8,
+    /// Currently drawn dot in line
+    dot: u8,
+    /// Current t-cycle in line
+    tcycle: u16,
+    /// Delay counter in t-cycles
     delay: usize,
+    /// Current PPU mode
     mode: PPUState,
 
     // OAM Scan state
+    /// The sprites that are selected for rendering during OAM are stored here
     oam_scan: [[u8; 4]; 10],
+    /// How many sprites have already been selected
     oams_index: usize,
+    /// Whether the sprite was selected for rendering last t-cycle
     oams_used_last: bool,
 
     // Drawing state
-    bgw_fifo: BackgroundFIFO, // Background and Window FIFO state
-    obj_fifo: BackgroundFIFO, // Object FIFO state
-    x_coordinate: u8,
-    window_y_cond: bool,
-    window_fetching: bool,
-    framebuffer: [[u8; 160]; 144], // Framebuffer to store pixel data for the current frame
+    /// Background/Window FIFO and Pixel fetcher
+    bgw_fifo: BackgroundFIFO,
+    /// Object FIFO and Pixel fetcher
+    obj_fifo: BackgroundFIFO,
+    /// Whether window fetching has started this frame (y position has been reached)
+    window_fetching_y: bool,
+    /// Whether window fetching has started this line (x position has been reached)
+    window_fetching_x: bool,
+    /// The framebuffer
+    framebuffer: [[u8; 160]; 144],
 }
 
 impl PPU {
     pub fn new() -> Self {
         Self {
-            scanline: 0,
-            tcycle: 0,
             frame: 0,
+            scanline: 0,
+            dot: 0,
+            tcycle: 0,
             delay: 0,
             mode: PPUState::OAMScan,
             oam_scan: [[0; 4]; 10],
@@ -37,124 +54,162 @@ impl PPU {
             oams_used_last: false,
             bgw_fifo: BackgroundFIFO::new(),
             obj_fifo: BackgroundFIFO::new(),
-            x_coordinate: 0,
-            window_y_cond: false,
-            window_fetching: false,
+            window_fetching_y: false,
+            window_fetching_x: false,
             framebuffer: [[0; 160]; 144],
         }
     }
 
-    pub fn step_cycle(&mut self, memory: &mut crate::memory::Memory) {
+    pub fn step_mcycle(&mut self, memory: &mut Memory) {
         for _ in 0..3 {
             self.step_tcycle(memory);
         }
     }
 
-    pub fn step_tcycle(&mut self, memory: &mut crate::memory::Memory) {
+    pub fn step_tcycle(&mut self, memory: &mut Memory) {
         if self.delay > 0 {
+            assert!(
+                self.mode == PPUState::Drawing,
+                "Delay outside of Drawing mode is not allowed"
+            );
+            assert!(
+                self.tcycle < 369,
+                "Delay caused the Drawing to take longer than 289 tcycles"
+            );
             self.delay -= 1;
+            self.tcycle += 1;
             return;
         }
 
         self.exec_tcycle(memory);
 
         self.tcycle += 1;
-        if self.tcycle == 456 {
+        if self.tcycle == 80 {
+            self.set_mode(PPUState::Drawing, memory);
+        } else if self.dot == 160 {
+            self.set_mode(PPUState::HBlank, memory);
+        } else if self.tcycle == 456 {
             self.tcycle = 0;
             self.scanline += 1;
-            if self.scanline == 154 {
+
+            if self.scanline <= 143 {
+                self.set_mode(PPUState::OAMScan, memory);
+            } else if self.scanline == 154 {
+                self.set_mode(PPUState::OAMScan, memory);
                 self.scanline = 0;
                 self.frame += 1;
+            } else {
+                self.set_mode(PPUState::VBlank, memory);
             }
-            // Reset OAM scan state at the end of each scanline
-            self.oams_index = 0;
-            self.oams_used_last = false;
         }
     }
 
-    fn exec_tcycle(&mut self, memory: &mut crate::memory::Memory) {
+    fn exec_tcycle(&mut self, memory: &mut Memory) {
         // Extract the lcdc (LDC-Control) register
         let lcdc = LCDC::from_byte(memory.get_byte(0xFF40));
 
-        if self.scanline >= 144 {
-            // VBlank
-            self.mode = PPUState::VBlank;
-            memory.oam_access = true;
-            memory.vram_access = true;
-        } else if self.tcycle <= 80 {
-            // OAM Scan
-            self.mode = PPUState::OAMScan;
-
-            if self.oams_index >= 10 {
-                // No more than 10 sprites can be rendered per scanline, so skip the rest of OAM scan
-                return;
-            }
-
-            memory.oam_access = false;
-            if self.tcycle % 2 == 0 {
-                // Read first two bytes of Object Attribute
-                let b0 = memory.get_byte(0xFE00 + (self.tcycle * 2) as u16);
-                let b1 = memory.get_byte(0xFE00 + (self.tcycle * 2 + 1) as u16);
-
-                if b0 <= self.scanline && self.scanline < b0 + if lcdc.obj_size { 16 } else { 8 } {
-                    // Sprite is visible on this scanline, store it for later rendering
-                    self.oam_scan[self.oams_index][0] = b0; // Y position
-                    self.oam_scan[self.oams_index][1] = b1; // X position
-                    self.oams_used_last = true;
-                }
-            } else {
-                if self.oams_used_last {
-                    // Read the remaining two bytes of Object Attribute if it was conclueded that the sprite is visible last dot (see code above)
-                    let b2 = memory.get_byte(0xFE00 + (self.tcycle * 2) as u16);
-                    let b3 = memory.get_byte(0xFE00 + (self.tcycle * 2 + 1) as u16);
-
-                    self.oam_scan[self.oams_index][2] = b2; // Tile index
-                    self.oam_scan[self.oams_index][3] = b3; // Attributes
-                    self.oams_index += 1;
-                } else {
-                    // This is the second part of an OAM entry, but it was concluded that the sprite is not visible last dot (see code above)
+        match self.mode {
+            PPUState::VBlank => {}
+            PPUState::HBlank => {}
+            PPUState::OAMScan => {
+                if self.oams_index >= 10 {
+                    // No more than 10 sprites can be rendered per scanline, so skip the rest of OAM scan
                     return;
                 }
-            }
-        } else if self.x_coordinate < 160 {
-            // Drawing
-            self.mode = PPUState::Drawing;
-            memory.oam_access = false;
-            memory.vram_access = false;
 
-            // Clock FIFOs
-            self.bgw_fifo.step(memory);
-            self.obj_fifo.step(memory);
+                if self.tcycle % 2 == 0 {
+                    // Read first two bytes of Object Attribute
+                    let b0 = memory.get_byte(0xFE00 + (self.tcycle * 2) as u16);
+                    let b1 = memory.get_byte(0xFE00 + (self.tcycle * 2 + 1) as u16);
 
-            if let Some(pixel) = self.bgw_fifo.take_pixel() {
-                // If obj pixel is transparent => draw bg/w pixel
-                // If bg-to-obj priority is 1 and bg/w pixel is not color 0 => draw bg/w pixel
-                // Else draw obj pixel
+                    if b0 <= self.scanline
+                        && self.scanline < b0 + if lcdc.obj_size { 16 } else { 8 }
+                    {
+                        // Sprite is visible on this scanline, store it for later rendering
+                        self.oam_scan[self.oams_index][0] = b0; // Y position
+                        self.oam_scan[self.oams_index][1] = b1; // X position
+                        self.oams_used_last = true;
+                    }
+                } else {
+                    if self.oams_used_last {
+                        // Read the remaining two bytes of Object Attribute if the sprite was visible last dot
+                        let b2 = memory.get_byte(0xFE00 + (self.tcycle * 2) as u16);
+                        let b3 = memory.get_byte(0xFE00 + (self.tcycle * 2 + 1) as u16);
 
-                // For now only draw bg
-                self.framebuffer[self.scanline as usize][self.x_coordinate as usize] = pixel;
-                self.x_coordinate += 1;
-
-                // Check if window should be drawn next
-                if lcdc.window_display_enable
-                    && !self.window_fetching
-                    && self.window_y_cond
-                    && self.x_coordinate >= memory.get_byte(0xFF4B) - 7
-                {
-                    self.window_fetching = true;
-                    self.bgw_fifo.start_window();
+                        self.oam_scan[self.oams_index][2] = b2; // Tile index
+                        self.oam_scan[self.oams_index][3] = b3; // Attributes
+                        self.oams_index += 1;
+                    } else {
+                        // The sprite was not visible last dot, so we don't read
+                        return;
+                    }
                 }
+            }
+            PPUState::Drawing => {
+                // Clock FIFOs
+                self.bgw_fifo.step(memory);
+                self.obj_fifo.step(memory);
+
+                if let Some(pixel) = self.bgw_fifo.take_pixel() {
+                    // If obj pixel is transparent => draw bg/w pixel
+                    // If bg-to-obj priority is 1 and bg/w pixel is not color 0 => draw bg/w pixel
+                    // Else draw obj pixel
+
+                    // For now only draw bg
+                    self.framebuffer[self.scanline as usize][self.dot as usize] = pixel;
+                    self.dot += 1;
+
+                    // Check if window should be drawn next
+                    if lcdc.window_display_enable
+                        && !self.window_fetching_x
+                        && self.window_fetching_y
+                        && self.dot >= memory.get_byte(0xFF4B) - 7
+                    {
+                        self.window_fetching_x = true;
+                        self.bgw_fifo.start_window();
+                    }
+                }
+            }
+        }
+    }
+
+    /// This mode sets a new PPU mode and performs all the setup. Be careful, this resets most of the PPU state and should only be called when a new mode starts
+    fn set_mode(&mut self, mode: PPUState, memory: &mut Memory) {
+        self.mode = mode;
+
+        match mode {
+            PPUState::OAMScan => {
+                self.oams_index = 0;
+                self.oams_used_last = false;
+                memory.oam_access = false;
+                memory.vram_access = true;
+            }
+            PPUState::Drawing => {
+                self.dot = 0;
+                memory.oam_access = false;
+                memory.vram_access = false;
+            }
+            PPUState::HBlank => {
+                memory.oam_access = true;
+                memory.vram_access = true;
+                memory.trigger_interrupt(1);
+            }
+            PPUState::VBlank => {
+                memory.oam_access = true;
+                memory.vram_access = true;
+                memory.trigger_interrupt(0);
             }
         }
     }
 }
 
 /// Describes the current mode of the PPU.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PPUState {
-    OAMScan,
-    Drawing,
-    HBlank,
-    VBlank,
+    HBlank = 0,
+    VBlank = 1,
+    OAMScan = 2,
+    Drawing = 3,
 }
 
 /// Helper struct to decode the LCDC register (0xFF40)
